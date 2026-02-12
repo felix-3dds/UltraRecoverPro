@@ -1,50 +1,44 @@
-import struct
-import os
 import logging
 
+
 class MP4Repairer:
-    """
-    Especialista en reconstrucción de contenedores MPEG-4.            Se enfoca en la reubicación del átomo 'moov' y la corrección de 'stco' (Chunk Offsets).
-    """
+    """Reconstrucción básica de contenedores MPEG-4."""
 
     def __init__(self, corrupted_path: str):
         self.path = corrupted_path
-        self.data = None
+        self.data: bytearray | None = None
 
-    def load_data(self):
-        with open(self.path, 'rb') as f:
-            self.data = bytearray(f.read())
+    def load_data(self) -> None:
+        with open(self.path, "rb") as file:
+            self.data = bytearray(file.read())
 
-    def find_atom(self, atom_type: b'str') -> int:
-        """Busca la posición de un átomo específico (ej. b'moov', b'mdat')."""
-        return self.data.find(atom_type) - 4
+    def find_atom(self, atom_type: bytes) -> int:
+        """Busca la posición del átomo (offset del size field)."""
+        if self.data is None:
+            raise RuntimeError("Debe cargar datos antes de buscar átomos")
+        position = self.data.find(atom_type)
+        if position < 4:
+            return -1
+        return position - 4
 
-    def fix_moov_at_end(self):
-        """
-        Muchos dispositivos graban el 'moov' al final. Si el archivo se cortó,
-        esta función intenta localizar un 'moov' huérfano y re-indexarlo.
-        """
-        moov_idx = self.find_atom(b'moov')
+    def fix_moov_at_end(self) -> bool:
+        if self.data is None:
+            raise RuntimeError("Debe cargar datos antes de reparar")
+
+        moov_idx = self.find_atom(b"moov")
         if moov_idx == -1:
-            logging.warning(f"[Repair] No se encontró el átomo moov en {self.path}. Se requiere análisis de referencia.")
+            logging.warning("[Repair] No se encontró el átomo moov en %s", self.path)
             return False
 
-        # Lógica de reordenamiento: Movemos el moov al principio si es necesario
-        # (FastStart) para mejorar la compatibilidad.
-        logging.info(f"[Repair] Átomo moov detectado en offset {moov_idx}. Re-indexando...")
+        logging.info("[Repair] Átomo moov detectado en offset %d. Re-indexando...", moov_idx)
         return True
 
-    def repair_zip_structure(self):
-        """
-        Para archivos DOCX/ZIP. Reconstruye el Directorio Central si el final
-        del archivo está truncado.
-        """
-        # Busca el inicio de cabeceras locales \x50\x4b\x03\x04
-        # y reconstruye el índice central en memoria.
-        logging.info("[Repair] Reconstruyendo Directorio Central de ZIP...")
-        pass
+    def repair_zip_structure(self) -> None:
+        logging.info("[Repair] Reconstrucción ZIP no implementada aún")
 
-    def save_recovered(self, output_path: str):
-        with open(output_path, 'wb') as f:
-            f.write(self.data)
-        logging.info(f"[Repair] Archivo reparado guardado en: {output_path}")
+    def save_recovered(self, output_path: str) -> None:
+        if self.data is None:
+            raise RuntimeError("No hay datos cargados para guardar")
+        with open(output_path, "wb") as file:
+            file.write(self.data)
+        logging.info("[Repair] Archivo reparado guardado en: %s", output_path)
