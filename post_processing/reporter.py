@@ -1,40 +1,76 @@
-import datetime                                                   import json
+import datetime
+import json
+from pathlib import Path
+from typing import Any
 
-class ForensicReporter:                                               """
-    Genera reportes técnicos y ejecutivos en formato HTML.
-    Incluye validación de integridad (Hashes) y estadísticas de distribución.
-    """
-                                                                      def __init__(self, case_id: str, investigator: str):
+
+class ForensicReporter:
+    """Genera reportes técnicos y ejecutivos en formato HTML + JSON."""
+
+    def __init__(self, case_id: str, investigator: str):
         self.case_id = case_id
         self.investigator = investigator
-        self.files_recovered = []
+        self.files_recovered: list[dict[str, Any]] = []
         self.start_time = datetime.datetime.now()
-                                                                      def add_entry(self, filename: str, ftype: str, size: int, offset: int, hash_sha256: str):
-        """Añade un registro de archivo recuperado al informe."""
-        self.files_recovered.append({
-            "name": filename,
-            "type": ftype,
-            "size": f"{size / 1024:.2f} KB",                                  "offset": hex(offset),
-            "hash": hash_sha256
-        })
 
-    def _generate_stats(self):
-        """Calcula la distribución por tipo para el gráfico."""
-        stats = {}
-        for f in self.files_recovered:
-            stats[f['type']] = stats.get(f['type'], 0) + 1
+    def add_entry(self, filename: str, ftype: str, size: int, offset: int, hash_sha256: str) -> None:
+        """Añade un registro de archivo recuperado al informe."""
+        self.files_recovered.append(
+            {
+                "name": filename,
+                "type": ftype,
+                "size_bytes": size,
+                "size_kb": round(size / 1024, 2),
+                "offset": hex(offset),
+                "hash": hash_sha256,
+            }
+        )
+
+    def _generate_stats(self) -> dict[str, int]:
+        stats: dict[str, int] = {}
+        for recovered in self.files_recovered:
+            ftype = recovered["type"]
+            stats[ftype] = stats.get(ftype, 0) + 1
         return stats
 
-    def generate_html(self, output_path: str):
+    def export_json(self, output_path: str) -> None:
+        payload = {
+            "case_id": self.case_id,
+            "investigator": self.investigator,
+            "start_time": self.start_time.isoformat(),
+            "totals": {
+                "files": len(self.files_recovered),
+                "by_type": self._generate_stats(),
+            },
+            "files": self.files_recovered,
+        }
+        Path(output_path).write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def generate_html(self, output_path: str) -> None:
         stats = self._generate_stats()
+        rows = "".join(
+            [
+                (
+                    "<tr><td>{name}</td><td>{type}</td><td>{size}</td>"
+                    "<td>{offset}</td><td class='hash'>{hash}</td></tr>"
+                ).format(
+                    name=item["name"],
+                    type=item["type"],
+                    size=f"{item['size_kb']:.2f} KB",
+                    offset=item["offset"],
+                    hash=item["hash"],
+                )
+                for item in self.files_recovered
+            ]
+        )
 
         html_template = f"""
         <!DOCTYPE html>
-        <html lang="es">
+        <html lang=\"es\">
         <head>
-            <meta charset="UTF-8">
+            <meta charset=\"UTF-8\">
             <title>Reporte UltraRecover Pro - {self.case_id}</title>
-            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
             <style>
                 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f4f7f6; }}
                 .container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
@@ -49,14 +85,14 @@ class ForensicReporter:                                               """
             </style>
         </head>
         <body>
-            <div class="container">
+            <div class=\"container\">
                 <h1>Informe Forense de Recuperación</h1>
                 <p><strong>ID de Caso:</strong> {self.case_id} | <strong>Investigador:</strong> {self.investigator}</p>
                 <p><strong>Fecha:</strong> {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}</p>
 
-                <div class="summary">
-                    <div class="card"><h3>{len(self.files_recovered)}</h3><p>Archivos</p></div>
-                    <div style="width: 300px;"><canvas id="typeChart"></canvas></div>
+                <div class=\"summary\">
+                    <div class=\"card\"><h3>{len(self.files_recovered)}</h3><p>Archivos</p></div>
+                    <div style=\"width: 300px;\"><canvas id=\"typeChart\"></canvas></div>
                 </div>
 
                 <table>
@@ -69,9 +105,7 @@ class ForensicReporter:                                               """
                             <th>Hash SHA-256 (Cadena de Custodia)</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {"".join([f"<tr><td>{f['name']}</td><td>{f['type']}</td><td>{f['size']}</td><td>{f['offset']}</td><td class='hash'>{f['hash']}</td></tr>" for f in self.files_recovered])}
-                    </tbody>
+                    <tbody>{rows}</tbody>
                 </table>
             </div>
 
@@ -92,6 +126,4 @@ class ForensicReporter:                                               """
         </html>
         """
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(html_template)
-        print(f"[Reporter] Informe generado con éxito en: {output_path}")
+        Path(output_path).write_text(html_template, encoding="utf-8")
