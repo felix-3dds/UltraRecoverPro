@@ -27,18 +27,27 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     carver = DeepCarver(DEFAULT_SIGNATURES)
     dashboard = ForensicDashboard()
     reporter = ForensicReporter(case_id=Path(source).stem, investigator="UltraRecoverPro")
+    overlap = max(len(signature["header"]) for signature in DEFAULT_SIGNATURES.values()) - 1
+    previous_tail = b""
+    seen_offsets: set[tuple[int, str]] = set()
 
     detections = 0
     dev.open_device()
     try:
         for offset in range(0, dev.size, dev.block_size):
             chunk = bytes(dev.get_segment(offset, min(dev.block_size, dev.size - offset)))
-            matches = carver.scan_buffer(chunk)
+            scan_chunk = previous_tail + chunk
+            base_offset = offset - len(previous_tail)
+            matches = carver.scan_buffer(scan_chunk)
 
             for match in matches:
-                abs_offset = offset + match["offset"]
+                abs_offset = base_offset + match["offset"]
                 signature = match["signature"]
                 file_type = match["type"]
+                fingerprint = (abs_offset, file_type)
+                if fingerprint in seen_offsets:
+                    continue
+                seen_offsets.add(fingerprint)
                 sample = _sample_chunk(dev, abs_offset, signature.get("max_size", dev.block_size))
 
                 if not FileValidator.check_entropy(sample):
@@ -56,6 +65,7 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                     hash_sha256=FileValidator.get_forensic_hash(sample),
                 )
 
+            previous_tail = chunk[-overlap:] if overlap > 0 else b""
             progress = (offset + len(chunk)) / dev.size if dev.size else 1.0
             dashboard.render_layout(progress, speed=(dev.block_size / (1024 * 1024)))
     finally:

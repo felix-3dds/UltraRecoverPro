@@ -40,6 +40,12 @@ class FileValidator:
             # Buscar el 'Central Directory End Record' signature
             return b'\x50\x4b\x05\x06' in file_bytes[-1024:]
 
+        if file_type == 'PNG':
+            return file_bytes.startswith(b'\x89PNG\r\n\x1a\n') and b'IEND' in file_bytes[-256:]
+
+        if file_type == 'MP4':
+            return b'ftyp' in file_bytes[:32]
+
         return True
 
     @staticmethod
