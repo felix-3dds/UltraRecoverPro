@@ -15,6 +15,7 @@ def test_run_scan_generates_reports(tmp_path: Path) -> None:
     start = len(payload) - 7000
     payload[start : start + 3] = b"\xff\xd8\xff"
     payload[start + 3 : -2] = os.urandom(len(payload[start + 3 : -2]))
+    payload[start + 64 : start + 68] = b"\xff\xdb\x00\x04"
     payload[-2:] = b"\xff\xd9"
 
     evidence.write_bytes(payload)
@@ -37,6 +38,7 @@ def test_run_scan_detects_signature_across_block_boundary(tmp_path: Path) -> Non
     boundary = 1024 * 1024
     payload[boundary - 1 : boundary + 2] = b"\xff\xd8\xff"
     payload[boundary + 2 : -2] = os.urandom(len(payload[boundary + 2 : -2]))
+    payload[boundary + 64 : boundary + 68] = b"\xff\xdb\x00\x04"
     payload[-2:] = b"\xff\xd9"
     evidence.write_bytes(payload)
 

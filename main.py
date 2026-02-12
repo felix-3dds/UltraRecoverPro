@@ -22,7 +22,12 @@ def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> bytes:
     return bytes(device.get_segment(offset, length))
 
 
-def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tuple[int, str, str]:
+def run_scan(
+    source: str,
+    report_dir: str,
+    block_size: int = 1024 * 1024,
+    tolerant_validation: bool = False,
+) -> tuple[int, str, str]:
     dev = DiskManager(source, block_size=block_size)
     carver = DeepCarver(DEFAULT_SIGNATURES)
     dashboard = ForensicDashboard()
@@ -52,7 +57,7 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
 
                 if not FileValidator.check_entropy(sample):
                     continue
-                if not FileValidator.validate_structure(sample, file_type):
+                if not FileValidator.validate_structure(sample, file_type, tolerant=tolerant_validation):
                     continue
 
                 detections += 1
@@ -86,6 +91,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report-dir", default="reports", help="Directorio de reportes de salida")
     parser.add_argument("--block-size", type=int, default=1024 * 1024, help="Tamaño de bloque en bytes")
     parser.add_argument("--log-level", default="INFO", help="Nivel de logging")
+    parser.add_argument(
+        "--tolerant-validation",
+        action="store_true",
+        help="Permite validaciones estructurales tolerantes para artefactos dañados",
+    )
     return parser
 
 
@@ -94,7 +104,12 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    detections, html_path, json_path = run_scan(args.source, args.report_dir, args.block_size)
+    detections, html_path, json_path = run_scan(
+        args.source,
+        args.report_dir,
+        args.block_size,
+        tolerant_validation=args.tolerant_validation,
+    )
     print(f"Análisis completado. Detecciones válidas: {detections}")
     print(f"Reporte HTML: {html_path}")
     print(f"Reporte JSON: {json_path}")
