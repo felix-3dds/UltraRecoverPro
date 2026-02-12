@@ -72,11 +72,14 @@ class ForensicReporter:
             <title>Reporte UltraRecover Pro - {self.case_id}</title>
             <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
             <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f4f7f6; }}
-                .container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
-                .summary {{ display: flex; justify-content: space-around; margin-bottom: 30px; }}
-                .card {{ background: #3498db; color: white; padding: 20px; border-radius: 5px; text-align: center; min-width: 150px; }}
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: linear-gradient(145deg, #f4f7f6, #ecf3ff); color: #1f2937; }}
+                .container {{ max-width: 1100px; margin: 30px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 35px rgba(44,62,80,0.15); }}
+                h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 0; }}
+                .summary {{ display: flex; gap: 16px; align-items: center; margin-bottom: 30px; flex-wrap: wrap; }}
+                .card {{ background: linear-gradient(120deg, #3498db, #2563eb); color: white; padding: 20px; border-radius: 10px; text-align: center; min-width: 170px; }}
+                .card h3 {{ margin: 0 0 8px 0; font-size: 2rem; }}
+                .meta-grid {{ display: grid; gap: 12px; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); margin: 14px 0 22px; }}
+                .meta {{ background: #f3f7ff; border-radius: 8px; padding: 10px 12px; border: 1px solid #dbeafe; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
                 th, td {{ padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 14px; }}
                 th {{ background-color: #2c3e50; color: white; }}
@@ -87,8 +90,11 @@ class ForensicReporter:
         <body>
             <div class=\"container\">
                 <h1>Informe Forense de Recuperación</h1>
-                <p><strong>ID de Caso:</strong> {self.case_id} | <strong>Investigador:</strong> {self.investigator}</p>
-                <p><strong>Fecha:</strong> {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <div class="meta-grid">
+                    <div class="meta"><strong>ID de Caso:</strong><br>{self.case_id}</div>
+                    <div class="meta"><strong>Investigador:</strong><br>{self.investigator}</div>
+                    <div class="meta"><strong>Fecha:</strong><br>{self.start_time.strftime('%Y-%m-%d %H:%M:%S')}</div>
+                </div>
 
                 <div class=\"summary\">
                     <div class=\"card\"><h3>{len(self.files_recovered)}</h3><p>Archivos</p></div>

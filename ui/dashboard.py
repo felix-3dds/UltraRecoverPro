@@ -1,5 +1,6 @@
 from rich.console import Console
 from rich.table import Table
+import time
 
 
 class ForensicDashboard:
@@ -8,6 +9,7 @@ class ForensicDashboard:
     def __init__(self):
         self.console = Console()
         self.stats = {"JPEG": 0, "PNG": 0, "MP4": 0, "ZIP": 0, "Otros": 0}
+        self._last_render = 0.0
 
     def update_stats(self, file_type: str) -> None:
         if file_type in self.stats:
@@ -16,6 +18,10 @@ class ForensicDashboard:
             self.stats["Otros"] += 1
 
     def render_layout(self, progress_val: float, speed: float) -> None:
+        now = time.monotonic()
+        if progress_val < 1.0 and now - self._last_render < 0.2:
+            return
+
         table = Table(title="UltraRecover Pro - Telemetría Forense")
         table.add_column("Métrica", style="cyan")
         table.add_column("Valor", style="magenta")
@@ -28,3 +34,4 @@ class ForensicDashboard:
 
         self.console.clear()
         self.console.print(table)
+        self._last_render = now
