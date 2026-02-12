@@ -6,14 +6,8 @@ from core.device import DiskManager
 from engines.carver import DeepCarver
 from post_processing.reporter import ForensicReporter
 from ui.dashboard import ForensicDashboard
+from utils.config_loader import get_runtime_signatures, load_config
 from utils.identifiers import FileValidator
-
-DEFAULT_SIGNATURES = {
-    "JPEG": {"header": b"\xff\xd8\xff", "max_size": 4 * 1024 * 1024},
-    "PNG": {"header": b"\x89\x50\x4e\x47", "max_size": 4 * 1024 * 1024},
-    "MP4": {"header": b"\x00\x00\x00\x18\x66\x74\x79\x70", "max_size": 8 * 1024 * 1024},
-    "ZIP": {"header": b"\x50\x4b\x03\x04", "max_size": 4 * 1024 * 1024},
-}
 
 
 def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> bytes:
@@ -22,12 +16,21 @@ def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> bytes:
     return bytes(device.get_segment(offset, length))
 
 
-def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tuple[int, str, str]:
+def run_scan(
+    source: str,
+    report_dir: str,
+    block_size: int = 1024 * 1024,
+    signatures: dict | None = None,
+    profile: dict | None = None,
+) -> tuple[int, str, str]:
+    runtime_signatures = signatures or load_default_signatures()
+    runtime_profile = profile or {"validate_entropy": True, "validate_structure": True}
+
     dev = DiskManager(source, block_size=block_size)
-    carver = DeepCarver(DEFAULT_SIGNATURES)
+    carver = DeepCarver(runtime_signatures)
     dashboard = ForensicDashboard()
     reporter = ForensicReporter(case_id=Path(source).stem, investigator="UltraRecoverPro")
-    overlap = max(len(signature["header"]) for signature in DEFAULT_SIGNATURES.values()) - 1
+    overlap = max(len(signature["header"]) for signature in runtime_signatures.values()) - 1
     previous_tail = b""
     seen_offsets: set[tuple[int, str]] = set()
 
@@ -50,9 +53,9 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                 seen_offsets.add(fingerprint)
                 sample = _sample_chunk(dev, abs_offset, signature.get("max_size", dev.block_size))
 
-                if not FileValidator.check_entropy(sample):
+                if runtime_profile.get("validate_entropy", True) and not FileValidator.check_entropy(sample):
                     continue
-                if not FileValidator.validate_structure(sample, file_type):
+                if runtime_profile.get("validate_structure", True) and not FileValidator.validate_structure(sample, file_type):
                     continue
 
                 detections += 1
@@ -85,8 +88,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("source", help="Ruta al disco o imagen forense")
     parser.add_argument("--report-dir", default="reports", help="Directorio de reportes de salida")
     parser.add_argument("--block-size", type=int, default=1024 * 1024, help="Tamaño de bloque en bytes")
+    parser.add_argument("--signatures-file", default=None, help="Archivo de configuración de firmas (JSON)")
+    parser.add_argument("--profile", choices=["fast", "balanced", "deep"], default="balanced", help="Perfil de escaneo")
     parser.add_argument("--log-level", default="INFO", help="Nivel de logging")
     return parser
+
+
+def load_default_signatures() -> dict:
+    config = load_config()
+    signatures, _ = get_runtime_signatures(config, "balanced")
+    return signatures
 
 
 def main() -> None:
@@ -94,7 +105,15 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    detections, html_path, json_path = run_scan(args.source, args.report_dir, args.block_size)
+    config = load_config(args.signatures_file)
+    runtime_signatures, runtime_profile = get_runtime_signatures(config, args.profile)
+    detections, html_path, json_path = run_scan(
+        args.source,
+        args.report_dir,
+        args.block_size,
+        signatures=runtime_signatures,
+        profile=runtime_profile,
+    )
     print(f"Análisis completado. Detecciones válidas: {detections}")
     print(f"Reporte HTML: {html_path}")
     print(f"Reporte JSON: {json_path}")

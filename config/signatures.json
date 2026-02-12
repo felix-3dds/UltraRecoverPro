@@ -1,0 +1,25 @@
+{
+  "signatures": {
+    "JPEG": {"header": "ffd8ff", "max_size": 4194304},
+    "PNG": {"header": "89504e47", "max_size": 4194304},
+    "MP4": {"header": "0000001866747970", "max_size": 8388608},
+    "ZIP": {"header": "504b0304", "max_size": 4194304}
+  },
+  "profiles": {
+    "fast": {
+      "max_size_factor": 0.5,
+      "validate_entropy": false,
+      "validate_structure": false
+    },
+    "balanced": {
+      "max_size_factor": 1.0,
+      "validate_entropy": true,
+      "validate_structure": true
+    },
+    "deep": {
+      "max_size_factor": 2.0,
+      "validate_entropy": true,
+      "validate_structure": true
+    }
+  }
+}
