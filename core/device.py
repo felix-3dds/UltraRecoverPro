@@ -19,6 +19,12 @@ class DiskManager:
             self.fd = os.open(self.source_path, os.O_RDONLY | (os.O_BINARY if os.name == 'nt' else 0))
             self.size = os.lseek(self.fd, 0, os.SEEK_END)
 
+            if self.size == 0:
+                # mmap no soporta archivos vacíos; mantenemos interfaz de lectura uniforme.
+                self.mapped_device = b""
+                logging.info(f"[Device] Imagen vacía abierta: {self.source_path}")
+                return
+
             # Mapeo de memoria: permite tratar el disco como un array gigante
             # prot=PROT_READ asegura integridad forense (solo lectura)
             self.mapped_device = mmap.mmap(self.fd, 0, access=mmap.ACCESS_READ)
@@ -32,7 +38,7 @@ class DiskManager:
         return memoryview(self.mapped_device)[start_offset:start_offset + length]
 
     def close(self):
-        if self.mapped_device:
+        if hasattr(self.mapped_device, "close"):
             self.mapped_device.close()
         if self.fd:
             os.close(self.fd)
