@@ -1,5 +1,6 @@
 import argparse
 import logging
+import time
 from pathlib import Path
 
 from core.device import DiskManager
@@ -32,10 +33,26 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     seen_offsets: set[tuple[int, str]] = set()
 
     detections = 0
+    total_bytes_processed = 0
+    scan_start = time.monotonic()
+    prev_sample_time = scan_start
+    prev_bytes_processed = 0
+
     dev.open_device()
     try:
         for offset in range(0, dev.size, dev.block_size):
             chunk = bytes(dev.get_segment(offset, min(dev.block_size, dev.size - offset)))
+            delta_bytes = len(chunk)
+            total_bytes_processed += delta_bytes
+            now = time.monotonic()
+            delta_time = now - prev_sample_time
+            delta_processed = total_bytes_processed - prev_bytes_processed
+            current_speed_bps = (delta_processed / delta_time) if delta_time > 0 else 0.0
+            elapsed = now - scan_start
+            average_speed_bps = (total_bytes_processed / elapsed) if elapsed > 0 else 0.0
+            bytes_remaining = max(0, dev.size - total_bytes_processed)
+            eta_seconds = (bytes_remaining / average_speed_bps) if average_speed_bps > 0 else None
+
             scan_chunk = previous_tail + chunk
             base_offset = offset - len(previous_tail)
             matches = carver.scan_buffer(scan_chunk)
@@ -66,8 +83,15 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                 )
 
             previous_tail = chunk[-overlap:] if overlap > 0 else b""
-            progress = (offset + len(chunk)) / dev.size if dev.size else 1.0
-            dashboard.render_layout(progress, speed=(dev.block_size / (1024 * 1024)))
+            progress = total_bytes_processed / dev.size if dev.size else 1.0
+            dashboard.render_layout(
+                progress_val=progress,
+                current_speed=current_speed_bps / (1024 * 1024),
+                average_speed=average_speed_bps / (1024 * 1024),
+                eta_seconds=eta_seconds,
+            )
+            prev_sample_time = now
+            prev_bytes_processed = total_bytes_processed
     finally:
         dev.close()
 
