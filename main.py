@@ -16,10 +16,10 @@ DEFAULT_SIGNATURES = {
 }
 
 
-def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> bytes:
+def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> memoryview:
     remaining = max(0, device.size - offset)
     length = min(max_size, remaining)
-    return bytes(device.get_segment(offset, length))
+    return device.get_segment(offset, length)
 
 
 def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tuple[int, str, str]:
@@ -35,8 +35,8 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     dev.open_device()
     try:
         for offset in range(0, dev.size, dev.block_size):
-            chunk = bytes(dev.get_segment(offset, min(dev.block_size, dev.size - offset)))
-            scan_chunk = previous_tail + chunk
+            chunk = dev.get_segment(offset, min(dev.block_size, dev.size - offset))
+            scan_chunk = previous_tail + chunk.tobytes()
             base_offset = offset - len(previous_tail)
             matches = carver.scan_buffer(scan_chunk)
 
@@ -51,8 +51,10 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                 sample = _sample_chunk(dev, abs_offset, signature.get("max_size", dev.block_size))
 
                 if not FileValidator.check_entropy(sample):
+                    sample.release()
                     continue
                 if not FileValidator.validate_structure(sample, file_type):
+                    sample.release()
                     continue
 
                 detections += 1
@@ -64,9 +66,12 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                     offset=abs_offset,
                     hash_sha256=FileValidator.get_forensic_hash(sample),
                 )
+                sample.release()
 
-            previous_tail = chunk[-overlap:] if overlap > 0 else b""
-            progress = (offset + len(chunk)) / dev.size if dev.size else 1.0
+            chunk_size = len(chunk)
+            previous_tail = chunk[-overlap:].tobytes() if overlap > 0 else b""
+            chunk.release()
+            progress = (offset + chunk_size) / dev.size if dev.size else 1.0
             dashboard.render_layout(progress, speed=(dev.block_size / (1024 * 1024)))
     finally:
         dev.close()
