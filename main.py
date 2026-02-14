@@ -57,15 +57,19 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                     sample.release()
                     continue
 
+                carved = FileValidator.trim_to_structure(sample, file_type)
+
                 detections += 1
                 dashboard.update_stats(file_type)
                 reporter.add_entry(
                     filename=f"{file_type}_{detections:04d}",
                     ftype=file_type,
-                    size=len(sample),
+                    size=len(carved),
                     offset=abs_offset,
-                    hash_sha256=FileValidator.get_forensic_hash(sample),
+                    hash_sha256=FileValidator.get_forensic_hash(carved),
                 )
+                if carved is not sample:
+                    carved.release()
                 sample.release()
 
             chunk_size = len(chunk)
