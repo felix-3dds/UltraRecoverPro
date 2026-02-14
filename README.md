@@ -20,6 +20,7 @@ El proyecto está diseñado como una base sólida para escenarios de **digital f
 - [Uso rápido](#uso-rápido)
 - [Ejemplo de ejecución](#ejemplo-de-ejecución)
 - [Salida y reportes](#salida-y-reportes)
+- [Compatibilidad multidispositivo](#compatibilidad-multidispositivo)
 - [Pruebas](#pruebas)
 - [Generación de evidencia de prueba](#generación-de-evidencia-de-prueba)
 - [Roadmap empresarial](#roadmap-empresarial)
@@ -176,6 +177,19 @@ Campos:
 - `size_kb`
 - `offset`
 - `hash`
+
+---
+
+## Compatibilidad multidispositivo
+
+El reporte HTML está optimizado para **escritorio, tablet y móvil**:
+
+- Incluye etiqueta `viewport` para ajuste automático de escala.
+- Usa diseño responsivo con `grid` y `clamp()` para tarjetas de resumen.
+- La tabla técnica cambia a formato de tarjetas en pantallas pequeñas, conservando contexto con etiquetas por campo (`data-label`).
+- Mantiene la legibilidad de hashes largos con tipografía monoespaciada y `word-break`.
+
+Esto facilita revisión de hallazgos en campo desde teléfonos o tablets sin perder detalle forense.
 
 ---
 
