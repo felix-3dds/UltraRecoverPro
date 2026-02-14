@@ -1,11 +1,15 @@
 import os
 import mmap
 import logging
+from pathlib import Path
+
 
 class DiskManager:
     """
-    Gestiona el acceso directo a dispositivos o imágenes forenses.    Implementa mmap para permitir Zero-Copy I/O en los motores de escaneo.
+    Gestiona el acceso directo a dispositivos o imágenes forenses.
+    Implementa mmap para permitir Zero-Copy I/O en los motores de escaneo.
     """
+
     def __init__(self, source_path: str, block_size: int = 4096):
         self.source_path = source_path
         self.block_size = block_size
@@ -30,6 +34,41 @@ class DiskManager:
     def get_segment(self, start_offset: int, length: int):
         """Retorna una vista (memoryview) para evitar copias de datos."""
         return memoryview(self.mapped_device)[start_offset:start_offset + length]
+
+    def read_exact(self, offset: int, size: int):
+        """Lee exactamente `size` bytes desde `offset` validando límites."""
+        if offset < 0 or size < 0:
+            raise ValueError("offset y size deben ser valores no negativos")
+        if offset + size > self.size:
+            raise ValueError("El rango solicitado excede el tamaño del dispositivo")
+        return self.get_segment(offset, size)
+
+    def iter_segments(self, overlap: int = 0):
+        """Itera segmentos de tamaño block_size con soporte opcional de solapamiento."""
+        if overlap < 0:
+            raise ValueError("overlap debe ser un valor no negativo")
+
+        offset = 0
+        while offset < self.size:
+            length = min(self.block_size, self.size - offset)
+            segment = self.get_segment(offset, length)
+            yield offset, segment
+            step = self.block_size - overlap
+            if step <= 0:
+                raise ValueError("overlap debe ser menor que block_size")
+            offset += step
+
+    def get_device_metadata(self) -> dict:
+        """Retorna metadata básica útil para cadena de custodia."""
+        stats = os.stat(self.source_path)
+        return {
+            "source": str(Path(self.source_path).resolve()),
+            "size_bytes": self.size,
+            "block_size": self.block_size,
+            "inode": stats.st_ino,
+            "device_id": stats.st_dev,
+            "mtime_epoch": stats.st_mtime,
+        }
 
     def close(self):
         if self.mapped_device:
