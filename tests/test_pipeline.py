@@ -25,6 +25,7 @@ def test_run_scan_generates_reports(tmp_path: Path) -> None:
     assert detections >= 1
     assert Path(html_report).exists()
     assert Path(json_report).exists()
+    assert (tmp_path / "reports" / "forensic_report.csv").exists()
 
     data = json.loads(Path(json_report).read_text(encoding="utf-8"))
     assert data["totals"]["files"] >= 1

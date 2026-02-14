@@ -80,8 +80,10 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     output.mkdir(parents=True, exist_ok=True)
     html_path = str(output / "forensic_report.html")
     json_path = str(output / "forensic_report.json")
+    csv_path = str(output / "forensic_report.csv")
     reporter.generate_html(html_path)
     reporter.export_json(json_path)
+    reporter.export_csv(csv_path)
     return detections, html_path, json_path
 
 

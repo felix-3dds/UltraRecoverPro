@@ -1,4 +1,5 @@
 import datetime
+import csv
 import html
 import json
 from pathlib import Path
@@ -27,12 +28,31 @@ class ForensicReporter:
             }
         )
 
+    def add_batch_entries(self, entries: list[dict[str, Any]]) -> None:
+        """Ingiere múltiples entradas en una sola operación."""
+        for entry in entries:
+            self.add_entry(
+                filename=str(entry["filename"]),
+                ftype=str(entry["ftype"]),
+                size=int(entry["size"]),
+                offset=int(entry["offset"]),
+                hash_sha256=str(entry["hash_sha256"]),
+            )
+
     def _generate_stats(self) -> dict[str, int]:
         stats: dict[str, int] = {}
         for recovered in self.files_recovered:
             ftype = recovered["type"]
             stats[ftype] = stats.get(ftype, 0) + 1
         return stats
+
+    def _generate_integrity_summary(self) -> dict[str, int]:
+        hashes = [item["hash"] for item in self.files_recovered]
+        return {
+            "hashes_total": len(hashes),
+            "hashes_unicos": len(set(hashes)),
+            "hashes_duplicados": len(hashes) - len(set(hashes)),
+        }
 
     def export_json(self, output_path: str) -> None:
         payload = {
@@ -43,9 +63,20 @@ class ForensicReporter:
                 "files": len(self.files_recovered),
                 "by_type": self._generate_stats(),
             },
+            "integrity": self._generate_integrity_summary(),
             "files": self.files_recovered,
         }
         Path(output_path).write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def export_csv(self, output_path: str) -> None:
+        """Exporta resultados tabulares para SIEM/BI o auditorías externas."""
+        with Path(output_path).open("w", encoding="utf-8", newline="") as csv_file:
+            writer = csv.DictWriter(
+                csv_file,
+                fieldnames=["name", "type", "size_bytes", "size_kb", "offset", "hash"],
+            )
+            writer.writeheader()
+            writer.writerows(self.files_recovered)
 
     def generate_html(self, output_path: str) -> None:
         stats = self._generate_stats()
