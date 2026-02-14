@@ -4,6 +4,7 @@ from pathlib import Path
 
 from core.device import DiskManager
 from engines.carver import DeepCarver
+from post_processing.repair import FileRepairService
 from post_processing.reporter import ForensicReporter
 from ui.dashboard import ForensicDashboard
 from utils.identifiers import FileValidator
@@ -15,6 +16,14 @@ DEFAULT_SIGNATURES = {
     "ZIP": {"header": b"\x50\x4b\x03\x04", "max_size": 4 * 1024 * 1024},
 }
 
+EXTENSIONS = {
+    "JPEG": ".jpg",
+    "PNG": ".png",
+    "MP4": ".mp4",
+    "ZIP": ".zip",
+    "DOCX": ".docx",
+}
+
 
 def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> memoryview:
     remaining = max(0, device.size - offset)
@@ -22,7 +31,13 @@ def _sample_chunk(device: DiskManager, offset: int, max_size: int) -> memoryview
     return device.get_segment(offset, length)
 
 
-def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tuple[int, str, str]:
+def run_scan(
+    source: str,
+    report_dir: str,
+    block_size: int = 1024 * 1024,
+    recovered_dir: str | None = None,
+    enable_repair: bool = True,
+) -> tuple[int, str, str]:
     dev = DiskManager(source, block_size=block_size)
     carver = DeepCarver(DEFAULT_SIGNATURES)
     dashboard = ForensicDashboard()
@@ -30,6 +45,11 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     overlap = max(len(signature["header"]) for signature in DEFAULT_SIGNATURES.values()) - 1
     previous_tail = b""
     seen_offsets: set[tuple[int, str]] = set()
+
+    output = Path(report_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    recovered_output = Path(recovered_dir) if recovered_dir else output / "recovered"
+    recovered_output.mkdir(parents=True, exist_ok=True)
 
     detections = 0
     dev.open_device()
@@ -48,24 +68,45 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
                 if fingerprint in seen_offsets:
                     continue
                 seen_offsets.add(fingerprint)
+
                 sample = _sample_chunk(dev, abs_offset, signature.get("max_size", dev.block_size))
 
-                if not FileValidator.check_entropy(sample):
+                is_repaired = False
+                if FileValidator.validate_structure(sample, file_type):
+                    carved = FileValidator.trim_to_structure(sample, file_type)
+                elif enable_repair:
+                    repaired_bytes = FileRepairService.repair_bytes(sample.tobytes(), file_type)
+                    if repaired_bytes is None or not FileValidator.validate_structure(repaired_bytes, file_type):
+                        sample.release()
+                        continue
+                    carved = FileValidator.trim_to_structure(memoryview(repaired_bytes), file_type)
+                    is_repaired = True
+                else:
                     sample.release()
                     continue
-                if not FileValidator.validate_structure(sample, file_type):
+
+                if not FileValidator.check_entropy(carved):
+                    carved.release()
                     sample.release()
                     continue
 
                 detections += 1
                 dashboard.update_stats(file_type)
+                filename = f"{file_type}_{detections:04d}{EXTENSIONS.get(file_type, '.bin')}"
+                file_path = recovered_output / filename
+                file_path.write_bytes(carved.tobytes())
+
                 reporter.add_entry(
-                    filename=f"{file_type}_{detections:04d}",
+                    filename=filename,
                     ftype=file_type,
-                    size=len(sample),
+                    size=len(carved),
                     offset=abs_offset,
-                    hash_sha256=FileValidator.get_forensic_hash(sample),
+                    hash_sha256=FileValidator.get_forensic_hash(carved),
+                    recovered_path=str(file_path),
+                    repaired=is_repaired,
                 )
+
+                carved.release()
                 sample.release()
 
             chunk_size = len(chunk)
@@ -76,8 +117,6 @@ def run_scan(source: str, report_dir: str, block_size: int = 1024 * 1024) -> tup
     finally:
         dev.close()
 
-    output = Path(report_dir)
-    output.mkdir(parents=True, exist_ok=True)
     html_path = str(output / "forensic_report.html")
     json_path = str(output / "forensic_report.json")
     csv_path = str(output / "forensic_report.csv")
@@ -91,6 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="UltraRecoverPro forensic scanner")
     parser.add_argument("source", help="Ruta al disco o imagen forense")
     parser.add_argument("--report-dir", default="reports", help="Directorio de reportes de salida")
+    parser.add_argument("--recovered-dir", default=None, help="Directorio para guardar archivos recuperados")
+    parser.add_argument("--disable-repair", action="store_true", help="Desactiva reparación automática")
     parser.add_argument("--block-size", type=int, default=1024 * 1024, help="Tamaño de bloque en bytes")
     parser.add_argument("--log-level", default="INFO", help="Nivel de logging")
     return parser
@@ -101,7 +142,13 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
-    detections, html_path, json_path = run_scan(args.source, args.report_dir, args.block_size)
+    detections, html_path, json_path = run_scan(
+        args.source,
+        args.report_dir,
+        args.block_size,
+        recovered_dir=args.recovered_dir,
+        enable_repair=not args.disable_repair,
+    )
     print(f"Análisis completado. Detecciones válidas: {detections}")
     print(f"Reporte HTML: {html_path}")
     print(f"Reporte JSON: {json_path}")

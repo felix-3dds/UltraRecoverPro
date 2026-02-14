@@ -20,6 +20,7 @@ El proyecto está diseñado como una base sólida para escenarios de **digital f
 - [Uso rápido](#uso-rápido)
 - [Ejemplo de ejecución](#ejemplo-de-ejecución)
 - [Salida y reportes](#salida-y-reportes)
+- [Compatibilidad multidispositivo](#compatibilidad-multidispositivo)
 - [Pruebas](#pruebas)
 - [Generación de evidencia de prueba](#generación-de-evidencia-de-prueba)
 - [Roadmap empresarial](#roadmap-empresarial)
@@ -126,6 +127,8 @@ Parámetros disponibles:
 - `source` (posicional): ruta al disco o imagen forense.
 - `--report-dir`: directorio de salida de reportes (default: `reports`).
 - `--block-size`: tamaño de bloque en bytes (default: `1048576`).
+- `--recovered-dir`: carpeta para guardar archivos recuperados (por defecto `reports/recovered`).
+- `--disable-repair`: desactiva la reparación automática de archivos dañados.
 - `--log-level`: nivel de logging (`DEBUG`, `INFO`, `WARNING`, etc.).
 
 Ejemplo:
@@ -159,6 +162,8 @@ reports/forensic_report.csv
 ### 1) Reporte HTML
 Pensado para revisión humana, incluye resumen del caso y tabla de archivos recuperados.
 
+Además de los reportes, los binarios recuperados se guardan automáticamente en `reports/recovered/` (o en la ruta indicada con `--recovered-dir`).
+
 ### 2) Reporte JSON
 Incluye:
 - metadatos del caso (`case_id`, `investigator`, `start_time`)
@@ -176,6 +181,19 @@ Campos:
 - `size_kb`
 - `offset`
 - `hash`
+
+---
+
+## Compatibilidad multidispositivo
+
+El reporte HTML está optimizado para **escritorio, tablet y móvil**:
+
+- Incluye etiqueta `viewport` para ajuste automático de escala.
+- Usa diseño responsivo con `grid` y `clamp()` para tarjetas de resumen.
+- La tabla técnica cambia a formato de tarjetas en pantallas pequeñas, conservando contexto con etiquetas por campo (`data-label`).
+- Mantiene la legibilidad de hashes largos con tipografía monoespaciada y `word-break`.
+
+Esto facilita revisión de hallazgos en campo desde teléfonos o tablets sin perder detalle forense.
 
 ---
 

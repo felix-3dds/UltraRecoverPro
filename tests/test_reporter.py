@@ -47,3 +47,27 @@ def test_export_csv_generates_tabular_report(tmp_path: Path) -> None:
     content = csv_path.read_text(encoding='utf-8')
     assert 'name,type,size_bytes,size_kb,offset,hash' in content
     assert 'evidence.jpg,JPEG,4096,4.0,0x10,' in content
+
+
+def test_generate_html_adds_responsive_and_integrity_cards(tmp_path: Path) -> None:
+    reporter = ForensicReporter(case_id='CASE-RESP', investigator='Mobile Analyst')
+    reporter.add_entry('one.jpg', 'JPEG', 2048, 32, 'a' * 64)
+
+    report_path = tmp_path / 'responsive_report.html'
+    reporter.generate_html(str(report_path))
+
+    content = report_path.read_text(encoding='utf-8')
+    assert 'name="viewport"' in content
+    assert 'Tamaño total recuperado' in content
+    assert "data-label='Hash SHA-256'" in content
+    assert '2.00 KB' in content
+
+
+def test_generate_html_handles_empty_result_set(tmp_path: Path) -> None:
+    reporter = ForensicReporter(case_id='CASE-EMPTY', investigator='Analyst')
+
+    report_path = tmp_path / 'empty_report.html'
+    reporter.generate_html(str(report_path))
+
+    content = report_path.read_text(encoding='utf-8')
+    assert 'No se detectaron archivos válidos.' in content

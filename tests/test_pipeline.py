@@ -73,3 +73,62 @@ def test_memoryview_pipeline_and_json_report(tmp_path: Path) -> None:
     assert FileValidator.check_entropy(mem_payload)
     assert FileValidator.validate_structure(mem_payload[start:], "JPEG")
     assert len(FileValidator.get_forensic_hash(mem_payload)) == 64
+
+
+def test_run_scan_trims_jpeg_until_eoi(tmp_path: Path) -> None:
+    evidence = tmp_path / "trim.img"
+    payload = bytearray(os.urandom(1024 * 1024))
+
+    start = 4096
+    jpeg = b"\xff\xd8\xff" + os.urandom(1024) + b"\xff\xd9" + os.urandom(4096)
+    payload[start : start + len(jpeg)] = jpeg
+    evidence.write_bytes(payload)
+
+    detections, _, json_report = run_scan(str(evidence), str(tmp_path / "reports"), block_size=256 * 1024)
+
+    assert detections >= 1
+    data = json.loads(Path(json_report).read_text(encoding="utf-8"))
+    first = data["files"][0]
+    assert first["type"] == "JPEG"
+    assert first["size_bytes"] < 10000
+
+
+def test_run_scan_saves_recovered_files(tmp_path: Path) -> None:
+    evidence = tmp_path / "save.img"
+    payload = bytearray(os.urandom(512 * 1024))
+
+    start = 2048
+    jpeg = b"\xff\xd8\xff" + os.urandom(512) + b"\xff\xd9"
+    payload[start : start + len(jpeg)] = jpeg
+    evidence.write_bytes(payload)
+
+    detections, _, json_report = run_scan(str(evidence), str(tmp_path / "reports"), block_size=128 * 1024)
+
+    assert detections >= 1
+    data = json.loads(Path(json_report).read_text(encoding="utf-8"))
+    recovered_path = Path(data["files"][0]["recovered_path"])
+    assert recovered_path.exists()
+    recovered_blob = recovered_path.read_bytes()
+    assert recovered_blob.startswith(b"\xff\xd8")
+    assert recovered_blob.endswith(b"\xff\xd9")
+
+
+def test_run_scan_repairs_corrupted_jpeg_without_eoi(tmp_path: Path) -> None:
+    evidence = tmp_path / "corrupt.img"
+    payload = bytearray(os.urandom(1024 * 1024))
+
+    start = 9000
+    noisy_body = bytes((i % 255) for i in range(1200))
+    corrupted = b"\xff\xd8\xff" + noisy_body
+    payload[start : start + len(corrupted)] = corrupted
+    payload[start + len(corrupted):] = b"\x00" * (len(payload) - (start + len(corrupted)))
+    evidence.write_bytes(payload)
+
+    detections, _, json_report = run_scan(str(evidence), str(tmp_path / "reports"), block_size=256 * 1024)
+
+    assert detections >= 1
+    data = json.loads(Path(json_report).read_text(encoding="utf-8"))
+    repaired_items = [item for item in data["files"] if item["type"] == "JPEG" and item.get("repaired") is True]
+    assert repaired_items
+    repaired_blob = Path(repaired_items[0]["recovered_path"]).read_bytes()
+    assert repaired_blob.endswith(b"\xff\xd9")
