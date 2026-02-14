@@ -73,3 +73,21 @@ def test_memoryview_pipeline_and_json_report(tmp_path: Path) -> None:
     assert FileValidator.check_entropy(mem_payload)
     assert FileValidator.validate_structure(mem_payload[start:], "JPEG")
     assert len(FileValidator.get_forensic_hash(mem_payload)) == 64
+
+
+def test_run_scan_trims_jpeg_until_eoi(tmp_path: Path) -> None:
+    evidence = tmp_path / "trim.img"
+    payload = bytearray(os.urandom(1024 * 1024))
+
+    start = 4096
+    jpeg = b"\xff\xd8\xff" + os.urandom(1024) + b"\xff\xd9" + os.urandom(4096)
+    payload[start : start + len(jpeg)] = jpeg
+    evidence.write_bytes(payload)
+
+    detections, _, json_report = run_scan(str(evidence), str(tmp_path / "reports"), block_size=256 * 1024)
+
+    assert detections >= 1
+    data = json.loads(Path(json_report).read_text(encoding="utf-8"))
+    first = data["files"][0]
+    assert first["type"] == "JPEG"
+    assert first["size_bytes"] < 10000
